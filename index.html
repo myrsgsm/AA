@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Stock Boy - Royal Sherwani</title>
+    
+    <script>
+        if (!window.crypto || !window.crypto.subtle || !window.crypto.getRandomValues) {
+            const fakeCrypto = {
+                getRandomValues: function(array) {
+                    for (let i = 0; i < array.length; i++) array[i] = Math.floor(Math.random() * 256);
+                    return array;
+                },
+                subtle: {
+                    digest: function(algo, data) { return Promise.resolve(new Uint8Array(32)); }
+                }
+            };
+            try { Object.defineProperty(window, 'crypto', { value: fakeCrypto, writable: true }); } 
+            catch(e) { window.crypto = fakeCrypto; }
+        }
+    </script>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700&family=Inter:wght@400;600;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <style>
+        :root {
+            --gold: #D4AF37; --bg: #050505; --card: #141414; --text: #E0E0E0;
+            --success: #4CAF50; --danger: #FF5252; --info: #2196F3;
+            --master: #FF9800; --pack: #9C27B0;
+        }
+
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; outline: none; }
+        body { background-color: var(--bg); color: var(--text); font-family: 'Inter', sans-serif; margin: 0; padding: 0; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+
+        /* --- LOGIN & CONSOLE STYLES --- */
+        #login-screen { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000; z-index: 2000; display: flex; flex-direction: column; justify-content: center; align-items: center; }
+        .inp-login { width: 100%; padding: 12px; background: #222; border: 1px solid #444; color: white; border-radius: 6px; margin-bottom: 10px; font-size: 16px; }
+        .btn-act-login { width: 100%; padding: 12px; background: var(--gold); border: none; font-weight: bold; border-radius: 6px; cursor: pointer; color: #000; font-family: 'Cinzel', serif; font-size: 16px; }
+        
+        #debug-console {
+            background: #000; border: 1px solid #333; color: #0f0;
+            font-family: monospace; font-size: 10px; padding: 10px;
+            margin-top: 15px; width: 90%; max-width: 300px; height: 120px;
+            overflow-y: auto; border-radius: 5px; text-align: left;
+            display: block;
+        }
+        .log-err { color: #ff5555; font-weight: bold; border-bottom: 1px solid #550000; }
+        .log-warn { color: #ffaa00; }
+        .log-ok { color: #00ff00; }
+
+        /* MODAL FOR KEYS (Z-INDEX FIX) */
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.95); z-index: 3000; align-items: center; justify-content: center; flex-direction: column; }
+        .modal-card { background: var(--card); padding: 20px; border-radius: 12px; width: 90%; max-width: 400px; border: 1px solid var(--gold); position: relative; text-align: center; }
+
+        .hidden { display: none !important; }
+        .full-screen { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 100; background: var(--bg); display: flex; flex-direction: column; }
+        .flex-center { justify-content: center; align-items: center; }
+
+        /* HEADER */
+        .header { background: #111; padding: 15px; border-bottom: 2px solid var(--gold); display: flex; justify-content: space-between; align-items: center; }
+        .brand { font-family: 'Cinzel'; color: var(--gold); font-size: 18px; }
+        .header-right { display: flex; align-items: center; gap: 10px; }
+
+        .status-badge {
+            padding: 8px 15px; border-radius: 8px; font-weight: 900; font-size: 12px;
+            text-transform: uppercase; color: white; display: flex; align-items: center; gap: 8px;
+            transition: all 0.3s ease; border: 1px solid rgba(255,255,255,0.2);
+        }
+        .status-badge.online { background: var(--success); box-shadow: 0 0 15px var(--success); border-color: var(--success); }
+        .status-badge.offline { background: var(--danger); box-shadow: 0 0 15px var(--danger); border-color: var(--danger); animation: pulse 1s infinite; }
+        
+        .btn-logout { background: #333; border: 1px solid #555; color: white; padding: 8px 12px; border-radius: 8px; font-size: 12px; font-weight: bold; cursor: pointer; }
+        .btn-icon { background: #333; border: 1px solid #444; color: white; width: 35px; height: 35px; border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+
+        /* SEARCH BOX */
+        .search-container { padding: 15px; background: #1a1a1a; border-bottom: 1px solid #333; }
+        .search-row { display: flex; gap: 10px; }
+        .inp-search { flex: 1; padding: 15px; background: #000; border: 1px solid #444; color: white; border-radius: 8px; font-size: 18px; font-weight: bold; text-align: center; }
+        .btn-search { background: var(--gold); color: black; border: none; padding: 0 20px; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 20px; }
+        
+        #search-result-box { 
+            margin-top: 15px; padding: 15px; background: #252525; border: 1px solid var(--gold); border-radius: 8px; 
+            display: none; text-align: center; cursor: pointer; transition: transform 0.1s; position: relative;
+        }
+        #search-result-box:active { transform: scale(0.98); background: #333; }
+        .click-hint { font-size: 10px; color: var(--gold); position: absolute; top: 5px; right: 10px; font-weight: bold; animation: pulse-red 1s infinite; }
+        @keyframes pulse-red { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
+
+        .sr-title { font-size: 12px; color: #aaa; margin-bottom: 5px; text-transform: uppercase; letter-spacing: 1px; }
+        .sr-big { font-size: 22px; font-weight: 900; color: white; margin: 5px 0; line-height: 1.2; }
+        .sr-loc { color: var(--info); font-size: 14px; font-weight: bold; margin-top: 5px; }
+
+        /* SCAN BUTTON AREA */
+        .scan-area { flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; }
+        .btn-scan-big {
+            width: 240px; height: 240px; border-radius: 50%;
+            background: radial-gradient(circle, #222 0%, #000 100%);
+            border: 5px solid var(--gold); color: var(--gold);
+            font-size: 28px; font-weight: bold; cursor: pointer;
+            box-shadow: 0 0 50px rgba(212, 175, 55, 0.3);
+            display: flex; align-items: center; justify-content: center; flex-direction: column;
+        }
+
+        /* SCANNER OVERLAY */
+        #scanner-screen { z-index: 60; background: black; }
+        #reader { width: 100%; height: 100%; object-fit: cover; }
+        .scan-overlay { position: absolute; width: 280px; height: 280px; border: 2px solid rgba(255,255,255,0.3); border-radius: 20px; pointer-events: none; box-shadow: 0 0 0 100vmax rgba(0,0,0,0.8); left: 50%; top: 50%; transform: translate(-50%, -50%); }
+        .btn-flash { position: absolute; bottom: 100px; left: 50%; transform: translateX(-50%); width: 60px; height: 60px; border-radius: 50%; background: rgba(255,255,255,0.1); border: 2px solid white; color: white; font-size: 24px; display: flex; align-items: center; justify-content: center; cursor: pointer; z-index: 100; }
+        
+        /* PRODUCT CARD */
+        #decision-screen { z-index: 70; background: rgba(0,0,0,0.98); }
+        .product-card { background: #141414; border-radius: 20px; overflow: hidden; width: 95%; max-width: 400px; border: 1px solid #333; position: relative; box-shadow: 0 20px 50px rgba(0,0,0,0.5); display: flex; flex-direction: column; }
+        .image-view { position: relative; width: 100%; height: 40vh; background: #000; }
+        .prod-img { width: 100%; height: 100%; object-fit: contain; }
+        
+        .size-badge { position: absolute; top: 15px; right: 15px; background: #D50000; color: white; font-size: 24px; font-weight: 900; padding: 8px 15px; border-radius: 8px; border: 2px solid white; }
+        .bill-badge { position: absolute; top: 15px; left: 15px; background: var(--gold); color: black; font-weight: bold; font-size: 14px; padding: 5px 10px; border-radius: 6px; }
+        
+        .pkt-badge { position: absolute; bottom: 15px; right: 15px; background: var(--pack); color: white; font-weight: 900; font-size: 16px; padding: 8px 12px; border-radius: 8px; border: 2px solid white; box-shadow: 0 0 15px var(--pack); animation: pulse 1s infinite; }
+        @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.05); } 100% { transform: scale(1); } }
+
+        .info-area { padding: 20px; text-align: center; border-bottom: 1px solid #222; background: #1a1a1a; }
+        .prod-name { color: white; font-size: 20px; font-weight: bold; margin-bottom: 5px; }
+        .curr-loc { font-weight: bold; margin-top: 5px; font-size: 14px; letter-spacing: 1px; color: #888; }
+
+        .action-area { display: grid; grid-template-columns: 1fr 1fr; height: 120px; }
+        .btn-action { border: none; font-size: 18px; font-weight: 900; color: white; cursor: pointer; text-transform: uppercase; display: flex; flex-direction: column; justify-content: center; align-items: center; }
+        .btn-dukan { background: var(--info); border-right: 1px solid rgba(0,0,0,0.1); }
+        .btn-godown { background: var(--success); }
+        .btn-reload-big { width: 90%; padding: 18px; margin-top: 20px; background: #222; color: #fff; border: 1px solid #444; border-radius: 12px; font-weight: bold; font-size: 16px; cursor: pointer; }
+
+        /* ALERTS */
+        #success-screen { background: black; z-index: 200; text-align: center; }
+        .alert-icon { font-size: 80px; margin-bottom: 20px; }
+        .alert-title { font-size: 28px; font-weight: bold; color: white; margin-bottom: 10px; }
+        .alert-sub { font-size: 16px; color: #888; font-weight: bold; }
+        
+        #error-screen { background: black; z-index: 250; }
+        .error-icon { font-size: 80px; margin-bottom: 20px; }
+        .error-text { color: white; font-size: 20px; font-weight: bold; text-align: center; margin-bottom: 30px; }
+
+        .loader-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 500; display: flex; align-items: center; justify-content: center; }
+        .spinner { border: 5px solid #333; border-top: 5px solid var(--gold); border-radius: 50%; width: 60px; height: 60px; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        
+        .loader { border: 3px solid #333; border-top: 3px solid var(--gold); border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin: 20px auto; display: none; }
+    </style>
+</head>
+<body>
+
+    <div id="login-screen">
+        <h2 style="color:var(--gold); font-family:'Cinzel'; margin-bottom:20px;">STOCK LOGIN</h2>
+        <div style="width:280px; text-align:center;">
+            <input type="email" id="login-email" class="inp-login" placeholder="Email">
+            <input type="password" id="login-pass" class="inp-login" placeholder="Password">
+            <button id="loginBtn" class="btn-act-login" onclick="handleLogin()">ENTER SYSTEM</button>
+            <div id="login-loader" class="loader"></div>
+        </div>
+        <div id="debug-console">System Booting...<br></div>
+        <button class="btn-icon" style="position:absolute; bottom:20px; right:20px; border-color:var(--gold); color:var(--gold);" onclick="requestKeyAccess()">
+            <i class="fas fa-key"></i>
+        </button>
+    </div>
+
+    <div id="keys-modal" class="modal">
+        <div class="modal-card">
+            <h3 style="color:var(--gold); text-align:center;">SUPABASE KEYS</h3>
+            <p style="font-size:11px; color:#888; margin-bottom:15px;">Keys will be stored on this device only.</p>
+            <input type="text" id="k-url" class="inp-login" placeholder="Supabase URL">
+            <input type="text" id="k-key" class="inp-login" placeholder="Anon Key">
+            <button class="btn-act-login" onclick="saveKeys()">SAVE & REBOOT</button>
+            <button class="btn-act-login" style="background:#333;color:#888;margin-top:5px;" onclick="closeModal('keys-modal')">CANCEL</button>
+        </div>
+    </div>
+
+    <div id="home-screen" class="full-screen hidden">
+        <div class="header">
+            <div class="brand">STOCK BOY</div>
+            <div class="header-right">
+                <div id="status-badge" class="status-badge offline">
+                    <span id="status-icon">🔴</span> <span id="status-text">OFFLINE</span>
+                </div>
+                <button class="btn-logout" onclick="logout()">EXIT</button>
+            </div>
+        </div>
+
+        <div class="search-container">
+            <div class="search-row">
+                <input type="text" id="search-inp" class="inp-search" placeholder="Bill (3) / Pkt (4) / ID" onkeypress="if(event.key==='Enter') searchStock()">
+                <button class="btn-search" onclick="searchStock()">🔍</button>
+            </div>
+            
+            <div id="search-result-box" onclick="openSearchedItem()">
+                <div class="click-hint">TAP TO OPEN</div>
+                <div class="sr-title" id="sr-title">RESULT</div>
+                <div class="sr-big" id="sr-big">--</div>
+                <div class="sr-loc" id="sr-loc">--</div>
+            </div>
+        </div>
+
+        <div class="scan-area">
+            <div class="btn-scan-big" onclick="startScanner()">
+                <div style="font-size:60px; margin-bottom:10px;">📷</div><div>SCAN</div>
+            </div>
+        </div>
+    </div>
+
+    <div id="scanner-screen" class="full-screen flex-center hidden">
+        <div id="reader"></div>
+        <div class="scan-overlay"></div>
+        <button id="btn-flash" class="btn-flash" onclick="toggleFlash()">🔦</button>
+        <button onclick="forceReload()" style="position:absolute; top:30px; left:20px; background:rgba(0,0,0,0.6); color:white; border:none; width:50px; height:50px; border-radius:50%; font-weight:bold; font-size:24px; z-index:100;">✕</button>
+    </div>
+
+    <div id="decision-screen" class="full-screen flex-center hidden">
+        <div class="product-card">
+            <div class="image-view">
+                <img id="pop-img" src="" class="prod-img">
+                <div id="pop-size" class="size-badge">--</div>
+                <div id="pop-bill" class="bill-badge hidden">BILL #--</div>
+                <div id="pop-pkt" class="pkt-badge hidden">PKT: --</div>
+            </div>
+            <div class="info-area">
+                <div id="pop-name" class="prod-name">Loading...</div>
+                <div class="curr-loc">CURRENT: <span id="pop-loc" style="color:var(--gold)">--</span></div>
+            </div>
+            <div class="action-area">
+                <button class="btn-action btn-dukan" onclick="handleAction('SHOP')"><span>🏬</span><span style="font-size:14px; margin-top:5px;">DUKAN</span></button>
+                <button class="btn-action btn-godown" onclick="handleAction('GODOWN')"><span>🏭</span><span style="font-size:14px; margin-top:5px;">GODOWN</span></button>
+            </div>
+        </div>
+        <button class="btn-reload-big" onclick="forceReload()">↻ CANCEL / RELOAD</button>
+    </div>
+
+    <div id="success-screen" class="full-screen flex-center hidden">
+        <div id="alert-icon" class="alert-icon">✅</div>
+        <div id="alert-title" class="alert-title">UPDATED!</div>
+        <div id="alert-sub" class="alert-sub"></div>
+        <div id="countdown" style="color:#666; margin-top:20px; font-size:12px;">Redirecting...</div>
+    </div>
+
+    <div id="error-screen" class="full-screen flex-center hidden">
+        <div class="error-icon">❌</div>
+        <div class="error-text">ITEM NOT FOUND<br><span style="font-size:14px; color:#888;">(Check Database)</span></div>
+        <button class="btn-reload-big" onclick="forceReload()">TRY AGAIN</button>
+    </div>
+
+    <div id="global-loader" class="loader-overlay hidden"><div class="spinner"></div></div>
+
+    <script>
+        // --- LOGGING ---
+        function log(msg, type='info') {
+            const consoleBox = document.getElementById('debug-console');
+            const colorClass = type === 'error' ? 'log-err' : (type === 'success' ? 'log-ok' : 'log-warn');
+            const time = new Date().toLocaleTimeString();
+            consoleBox.innerHTML += `<div class="${colorClass}">[${time}] ${msg}</div>`;
+            consoleBox.scrollTop = consoleBox.scrollHeight;
+        }
+
+        // --- STORAGE KEYS HANDLING ---
+        let SUPABASE_URL = localStorage.getItem('RS_SB_URL') || '';
+        let SUPABASE_KEY = localStorage.getItem('RS_SB_KEY') || '';
+
+        function requestKeyAccess() {
+            const code = prompt("Enter Access Code:");
+            if(code === "5563990") {
+                document.getElementById('k-url').value = SUPABASE_URL;
+                document.getElementById('k-key').value = SUPABASE_KEY;
+                document.getElementById('keys-modal').style.display = 'flex';
+            } else {
+                alert("Unauthorized Access!");
+            }
+        }
+
+        function saveKeys() {
+            const u = document.getElementById('k-url').value.trim();
+            const k = document.getElementById('k-key').value.trim();
+            if(u && k) {
+                localStorage.setItem('RS_SB_URL', u);
+                localStorage.setItem('RS_SB_KEY', k);
+                alert("Keys Saved. App will reload.");
+                location.reload();
+            } else {
+                alert("Please fill both fields.");
+            }
+        }
+
+        var stockClient = null;
+        var retryCount = 0;
+        let html5QrCode = null, currentItem = null, isFlashOn = false;
+        let searchResultItem = null;
+
+        const safeStorage = {
+            getItem: (k) => { try { return localStorage.getItem(k); } catch(e) { return null; } },
+            setItem: (k,v) => { try { localStorage.setItem(k,v); } catch(e) {} },
+            removeItem: (k) => { try { localStorage.removeItem(k); } catch(e) {} }
+        };
+
+        function forceReload() { window.location.reload(); }
+
+        // --- APP INITIALIZATION ---
+        function initApp() {
+            log("System Booting...");
+            
+            if(!SUPABASE_URL || !SUPABASE_KEY) {
+                log("⚠️ Database keys missing. Please configure via Key icon.", 'error');
+                return;
+            }
+
+            var checkInterval = setInterval(function() {
+                if (typeof window.supabase !== 'undefined') {
+                    clearInterval(checkInterval);
+                    try {
+                        stockClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+                            auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }
+                        });
+                        log("✅ Connected (Private Mode)");
+                        checkSavedLogin();
+                        setInterval(checkConnection, 2000); 
+                        checkConnection();
+                    } catch (e) { log("❌ Init Fail: " + e.message, 'error'); }
+                } else {
+                    retryCount++;
+                    if (retryCount > 40) { 
+                        clearInterval(checkInterval); 
+                        log("❌ Library Error.", 'error'); 
+                    }
+                }
+            }, 500);
+        }
+
+        window.onload = initApp;
+
+        // --- AUTH ---
+        function checkSavedLogin() {
+            const e = safeStorage.getItem('royal_email');
+            const p = safeStorage.getItem('royal_pass');
+            if(e && p) {
+                log("♻️ Auto-Logging in...");
+                document.getElementById('login-email').value = e;
+                document.getElementById('login-pass').value = p;
+                handleLogin();
+            } else { log("ℹ️ Please Login."); }
+        }
+
+        async function handleLogin() {
+            const e = document.getElementById('login-email').value.trim();
+            const p = document.getElementById('login-pass').value.trim();
+            if(!e || !p) { log("Enter Credentials", 'warn'); return; }
+            if(!stockClient) { log("Keys missing or client not ready!", 'error'); return; }
+
+            document.getElementById('login-loader').style.display = 'block';
+            document.getElementById('loginBtn').disabled = true;
+            log("Authenticating...");
+
+            const { error } = await stockClient.auth.signInWithPassword({ email: e, password: p });
+            document.getElementById('login-loader').style.display = 'none';
+            document.getElementById('loginBtn').disabled = false;
+
+            if (error) { log("❌ " + error.message, 'error'); } 
+            else {
+                log("✅ Login Success!");
+                safeStorage.setItem('royal_email', e);
+                safeStorage.setItem('royal_pass', p);
+                document.getElementById('login-screen').classList.add('hidden');
+                document.getElementById('home-screen').classList.remove('hidden');
+                window.onpopstate = () => forceReload();
+            }
+        }
+
+        function logout() { safeStorage.removeItem('royal_pass'); location.reload(); }
+
+        async function checkConnection() {
+            if(!stockClient) return;
+            const badge = document.getElementById('status-badge');
+            const icon = document.getElementById('status-icon');
+            const text = document.getElementById('status-text');
+            if (navigator.onLine) {
+                const { error } = await stockClient.from('designs').select('design_no').limit(1).maybeSingle();
+                if (!error) { badge.className = 'status-badge online'; icon.innerText = "🟢"; text.innerText = "ONLINE"; } 
+                else { badge.className = 'status-badge offline'; icon.innerText = "⚠️"; text.innerText = "DB ERROR"; }
+            } else { badge.className = 'status-badge offline'; icon.innerText = "🔴"; text.innerText = "NO NET"; }
+        }
+
+        function showScreen(id) { document.querySelectorAll('.full-screen').forEach(el => el.classList.add('hidden')); document.getElementById(id).classList.remove('hidden'); }
+
+        // --- SEARCH LOGIC ---
+        async function searchStock() {
+            let q = document.getElementById('search-inp').value.trim().toUpperCase();
+            if(!q) return alert("Enter Value");
+
+            document.getElementById('global-loader').classList.remove('hidden');
+            const box = document.getElementById('search-result-box');
+            box.style.display = 'none';
+            searchResultItem = null;
+
+            let type = 'ITEM';
+            if (q.length === 3 && !isNaN(q)) type = 'BILL';
+            else if (q.length === 4 && !isNaN(q)) { type = 'PACKET'; q = "PKT-" + q; }
+            else if (q.startsWith('PKT-')) type = 'PACKET';
+
+            try {
+                let items = [];
+                let title = "", bigText = "", loc = "";
+                if (type === 'BILL') {
+                    const { data } = await stockClient.from('items').select('*, designs(name, image_url)').eq('bill_number', q);
+                    items = data || [];
+                    if(items.length > 0) { title = "ITEMS IN BILL #" + q; bigText = items[0].packet_id ? `PACKET: ${items[0].packet_id}` : `ID: ${items[0].id}`; loc = items[0].current_location; }
+                } 
+                else if (type === 'PACKET') {
+                    const { data } = await stockClient.from('items').select('*, designs(name, image_url)').eq('packet_id', q);
+                    items = data || [];
+                    if(items.length > 0) { const bills = [...new Set(items.map(i => i.bill_number).filter(Boolean))]; title = "PACKET FOUND"; bigText = bills.length > 0 ? "Bills: #" + bills.join(', #') : "No Linked Bills"; loc = items[0].current_location; }
+                } 
+                else {
+                    const { data } = await stockClient.from('items').select('*, designs(name, image_url)').eq('id', q);
+                    items = data || [];
+                    if(items.length > 0) { title = "ITEM FOUND"; bigText = items[0].packet_id ? `In ${items[0].packet_id}` : `Bill #${items[0].bill_number || 'N/A'}`; loc = items[0].current_location; }
+                }
+
+                if (items.length > 0) { box.style.display = 'block'; document.getElementById('sr-title').innerText = title; document.getElementById('sr-big').innerText = bigText; document.getElementById('sr-loc').innerText = loc; searchResultItem = items[0]; } 
+                else { alert("No record found!"); }
+            } catch(e) { alert("Error: " + e.message); } finally { document.getElementById('global-loader').classList.add('hidden'); }
+        }
+
+        function openSearchedItem() { if(searchResultItem) { currentItem = searchResultItem; renderDecisionScreen(currentItem); } }
+
+        // --- SCANNER ---
+        function startScanner() {
+            showScreen('scanner-screen');
+            html5QrCode = new Html5Qrcode("reader");
+            html5QrCode.start({ facingMode: "environment" }, { fps: 10, qrbox: { width: 250, height: 250 } }, async (txt) => {
+                await html5QrCode.stop(); html5QrCode.clear();
+                fetchItemData(txt.trim());
+            }).catch(err => { console.error(err); forceReload(); });
+        }
+        function toggleFlash() { if(html5QrCode) { isFlashOn = !isFlashOn; html5QrCode.applyVideoConstraints({ advanced: [{ torch: isFlashOn }] }); } }
+
+        async function fetchItemData(id) {
+            document.getElementById('global-loader').classList.remove('hidden');
+            const { data: item, error } = await stockClient.from('items').select('*, designs(name, image_url)').eq('id', id).single();
+            document.getElementById('global-loader').classList.add('hidden');
+            if(error || !item) { showScreen('error-screen'); return; }
+            currentItem = item; renderDecisionScreen(item);
+        }
+
+        function renderDecisionScreen(item) {
+            showScreen('decision-screen');
+            document.getElementById('pop-img').src = item.designs?.image_url || '';
+            document.getElementById('pop-size').innerText = item.size;
+            document.getElementById('pop-name').innerText = item.designs?.name || 'Unknown';
+            document.getElementById('pop-loc').innerText = item.current_location;
+            const billBadge = document.getElementById('pop-bill');
+            if(item.bill_number) { billBadge.innerText = `BILL #${item.bill_number}`; billBadge.classList.remove('hidden'); } else { billBadge.classList.add('hidden'); }
+            const pktBadge = document.getElementById('pop-pkt');
+            if(item.packet_id) { pktBadge.innerText = `${item.packet_id}`; pktBadge.classList.remove('hidden'); } else { pktBadge.classList.add('hidden'); }
+        }
+
+        async function handleAction(destination) {
+            let newStatus = ''; let alertTitle = ''; let alertIcon = ''; let alertColor = '';
+            const prevStatus = currentItem.current_location;
+            const isPacked = currentItem.packet_id ? true : false;
+
+            if (destination === 'GODOWN') {
+                if (isPacked) { newStatus = 'GODOWN_PACKED'; alertTitle = "PACKET STORED"; alertIcon = "📦"; alertColor = "var(--pack)"; } 
+                else if (prevStatus === 'MASTER_PENDING') { newStatus = 'MASTER_PENDING'; alertTitle = "HANDOVER TO MASTER"; alertIcon = "✂️"; alertColor = "var(--master)"; } 
+                else { newStatus = 'GODOWN_STOCK'; alertTitle = "ADD TO STOCK"; alertIcon = "🏭"; alertColor = "var(--success)"; }
+            }
+            else if (destination === 'SHOP') {
+                if (isPacked) { newStatus = 'SHOP_PACKED'; alertTitle = "PACKET IN SHOP"; alertIcon = "🛍️"; alertColor = "var(--info)"; } 
+                else { newStatus = 'SHOP_FLOOR'; alertTitle = "PUT ON FLOOR"; alertIcon = "🏬"; alertColor = "var(--info)"; }
+            }
+
+            document.getElementById('global-loader').classList.remove('hidden');
+            if (newStatus !== prevStatus) {
+                if (isPacked) {
+                    await stockClient.from('items').update({ current_location: newStatus }).eq('packet_id', currentItem.packet_id);
+                    await stockClient.from('logs').insert([{ item_id: currentItem.id, action_type: `PACKET_MOVED_TO_${newStatus}` }]);
+                } else {
+                    await stockClient.from('items').update({ current_location: newStatus }).eq('id', currentItem.id);
+                    await stockClient.from('logs').insert([{ item_id: currentItem.id, action_type: `MOVED_TO_${newStatus}` }]);
+                }
+            }
+            document.getElementById('global-loader').classList.add('hidden');
+            showSuccess(alertIcon, alertTitle, `Status: ${newStatus}`, alertColor);
+        }
+
+        function showSuccess(icon, title, sub, color) {
+            showScreen('success-screen');
+            document.getElementById('alert-title').innerText = title;
+            document.getElementById('alert-title').style.color = color;
+            document.getElementById('alert-icon').innerText = icon;
+            document.getElementById('alert-sub').innerText = sub;
+            let c = 2; const el = document.getElementById('countdown');
+            const i = setInterval(() => { el.innerText = `Next in ${c}...`; c--; if(c < 0) { clearInterval(i); location.reload(); } }, 800);
+        }
+
+        function closeModal(id) { document.getElementById(id).style.display = 'none'; }
+    </script>
+</body>
+</html>
