@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Royal Assign Pro</title>
+    
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://unpkg.com/html5-qrcode"></script>
+    <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
+    
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#800000">
+    <link rel="apple-touch-icon" href="icon-192.png">
+
+    <style>
+        :root { 
+            --maroon: #800000; --gold: #D4AF37; --cream: #F5F5DC;
+            --white: #FFFFFF; --dark: #1a1a1a; --green: #2e7d32;
+        }
+        * { box-sizing: border-box; font-family: 'Segoe UI', sans-serif; -webkit-tap-highlight-color: transparent; }
+        body { background-color: var(--cream); margin: 0; padding: 0; color: #333; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+
+        header { background: var(--maroon); color: white; padding: 15px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 4px 10px rgba(0,0,0,0.2); }
+        .app-title { font-weight: 900; letter-spacing: 1px; font-size: 18px; }
+        .btn-logout { background: none; border: none; color: white; font-size: 22px; cursor: pointer; }
+
+        /* SCREENS */
+        .screen { flex: 1; display: none; flex-direction: column; align-items: center; justify-content: center; padding: 20px; width: 100%; }
+        .screen.active { display: flex; }
+
+        /* CONNECT BTN */
+        .btn-pair {
+            width: 180px; height: 180px; border-radius: 50%;
+            background: var(--white); border: 4px solid var(--maroon);
+            color: var(--maroon); font-size: 18px; font-weight: 900;
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+            box-shadow: 0 10px 30px rgba(128, 0, 0, 0.2); cursor: pointer;
+            transition: transform 0.2s;
+        }
+        .btn-pair:active { transform: scale(0.95); background: var(--maroon); color: var(--gold); }
+        .btn-pair i { font-size: 50px; margin-bottom: 10px; }
+
+        /* INPUTS */
+        .input-group { background: white; padding: 15px; border-radius: 12px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); width: 100%; max-width: 350px; margin-bottom: 15px; }
+        .lbl { display: block; font-weight: bold; color: var(--maroon); margin-bottom: 5px; font-size: 12px; }
+        .inp { width: 100%; border: none; border-bottom: 2px solid #ccc; padding: 10px 5px; font-size: 20px; font-weight: 900; outline: none; background: transparent; }
+        
+        .btn-main {
+            width: 100%; max-width: 350px; padding: 18px; border-radius: 12px; border: none;
+            background: var(--maroon); color: var(--gold); font-size: 18px; font-weight: 900;
+            cursor: pointer; box-shadow: 0 5px 15px rgba(128,0,0,0.3); margin-top: 10px;
+            display: flex; align-items: center; justify-content: center; gap: 10px;
+        }
+        .btn-main:disabled { background: #999; color: #ddd; }
+
+        /* DATE ADJUSTER */
+        .date-control-box {
+            display: none; /* HIDDEN INITIALLY */
+            background: white; padding: 15px; border-radius: 12px; 
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05); width: 100%; max-width: 350px; margin-bottom: 15px;
+        }
+        .date-row { display: flex; align-items: center; justify-content: space-between; margin-top: 5px; }
+        .btn-adj { 
+            width: 50px; height: 50px; border-radius: 10px; border: none; 
+            background: var(--maroon); color: white; font-size: 24px; font-weight: bold; cursor: pointer; 
+        }
+        .date-disp { font-size: 22px; font-weight: 900; color: #333; letter-spacing: 1px; }
+
+        /* MODALS */
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.95); z-index: 6000; align-items: center; justify-content: center; }
+        .modal-content { background: white; width: 95%; max-width: 400px; padding: 20px; border-radius: 12px; max-height: 90vh; overflow-y: auto; display: flex; flex-direction: column; }
+        
+        /* ITEM LIST */
+        .item-card { 
+            background: #f9f9f9; padding: 15px; margin-bottom: 10px; border-radius: 8px; border: 1px solid #ddd;
+            display: flex; justify-content: space-between; align-items: center; cursor: pointer;
+        }
+        .item-card:active { background: var(--maroon); color: white; }
+        .item-name { font-weight: bold; font-size: 16px; }
+
+        /* SCANNER */
+        #qr-reader { width: 100%; border-radius: 10px; overflow: hidden; background: black; margin-bottom: 15px; }
+        .btn-skip { background: #555; color: white; padding: 12px; border: none; border-radius: 8px; width: 100%; font-weight: bold; margin-top: 10px; }
+
+        /* RECEIPT PREVIEW */
+        .receipt-preview {
+            background: white; padding: 10px; border: 1px dashed #ccc; 
+            font-family: 'Courier New', monospace; font-size: 12px; 
+            overflow-y: auto; margin-bottom: 15px; white-space: pre-wrap; color: black; max-height: 300px;
+        }
+        .modal-btns { display: flex; gap: 10px; }
+        .btn-confirm { flex: 1; background: var(--maroon); color: white; border: none; padding: 15px; border-radius: 8px; font-weight: bold; }
+        .btn-cancel { flex: 1; background: #ddd; color: #333; border: none; padding: 15px; border-radius: 8px; font-weight: bold; }
+
+        /* LOGIN */
+        #login-view { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: var(--dark); z-index: 8000; display: flex; flex-direction: column; justify-content: center; align-items: center; }
+        .login-card { background: white; padding: 30px; border-radius: 15px; width: 90%; max-width: 350px; text-align: center; }
+        .inp-login { width: 100%; padding: 15px; margin: 10px 0; border: 1px solid #ccc; border-radius: 8px; font-size: 16px; }
+        
+        #settings-modal { display: none; position: fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.9); z-index:9000; align-items:center; justify-content:center;} 
+    </style>
+</head>
+<body>
+
+    <div id="login-view">
+        <div style="position:fixed; top:20px; right:20px; color:white; cursor:pointer;" onclick="openSettings()">⚙️</div>
+        <div class="login-card">
+            <h2 style="color:var(--maroon);">ROYAL ASSIGN</h2>
+            <input type="email" id="login-email" class="inp-login" placeholder="Email">
+            <input type="password" id="login-pass" class="inp-login" placeholder="Password">
+            <button class="btn-main" onclick="handleLogin()">LOGIN</button>
+        </div>
+    </div>
+
+    <div id="settings-modal">
+        <div class="login-card">
+            <h3>Config</h3>
+            <input type="text" id="conf-url" class="inp-login" placeholder="URL">
+            <input type="text" id="conf-key" class="inp-login" placeholder="Key">
+            <button class="btn-main" onclick="saveConfig()">SAVE</button>
+            <button class="btn-cancel" style="width:100%; margin-top:10px;" onclick="document.getElementById('settings-modal').style.display='none'">CLOSE</button>
+        </div>
+    </div>
+
+    <header>
+        <div class="app-title">ALTERATION ASSIGN</div>
+        <button class="btn-logout" onclick="logout()"><i class="ri-logout-box-r-line"></i></button>
+    </header>
+
+    <div id="screen-connect" class="screen active">
+        <button class="btn-pair" onclick="connectPrinter()">
+            <i class="ri-bluetooth-connect-line"></i>
+            <div>PAIR<br>PRINTER</div>
+        </button>
+        <p style="margin-top:20px; color:#666; font-weight:bold;">Tap to Start</p>
+    </div>
+
+    <div id="screen-work" class="screen">
+        <div class="input-group">
+            <label class="lbl">BILL NUMBER</label>
+            <input type="number" id="bill-no" class="inp" placeholder="e.g. 786">
+        </div>
+
+        <div id="date-box" class="date-control-box">
+            <label class="lbl">DELIVERY DATE (DD-MM-YYYY)</label>
+            <div class="date-row">
+                <button class="btn-adj" onclick="adjustDate(-1)">-</button>
+                <span id="date-display" class="date-disp">--/--/----</span>
+                <button class="btn-adj" onclick="adjustDate(1)">+</button>
+            </div>
+            <input type="date" id="del-date" style="display:none;">
+        </div>
+
+        <button id="btn-fetch" class="btn-main" onclick="fetchBillAndShowItems()">
+            <i class="ri-shirt-line"></i> GET BILL ITEMS
+        </button>
+    </div>
+
+    <div id="modal-items" class="modal">
+        <div class="modal-content">
+            <h3 style="margin-top:0; color:var(--maroon);">SELECT ITEM</h3>
+            <div id="items-list">Loading...</div>
+            <button class="btn-cancel" style="width:100%; margin-top:10px;" onclick="closeModal('modal-items')">CANCEL</button>
+        </div>
+    </div>
+
+    <div id="modal-scan" class="modal">
+        <div class="modal-content" style="background:black; color:white;">
+            <h3 style="margin-top:0; text-align:center; color:var(--gold);">SCAN PCS ID</h3>
+            <div id="qr-reader"></div>
+            <div style="text-align:center; font-size:12px; color:#aaa; margin-bottom:10px;">Scanning for Inventory Link...</div>
+            <button class="btn-skip" onclick="skipScanning()">SKIP SCANNING ⏩</button>
+            <button class="btn-cancel" style="width:100%; margin-top:10px; background:#333; color:#fff;" onclick="closeModal('modal-scan')">CANCEL</button>
+        </div>
+    </div>
+
+    <div id="modal-preview" class="modal">
+        <div class="modal-content">
+            <h3 style="margin-top:0; text-align:center; color:var(--maroon);">CONFIRM RECEIPT</h3>
+            <div id="receipt-container" class="receipt-preview"></div>
+            <div class="modal-btns">
+                <button class="btn-cancel" onclick="closeModal('modal-preview')">CANCEL</button>
+                <button class="btn-confirm" onclick="confirmAndPrint()">PRINT & FINISH</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let supabaseClient, printCharacteristic, printerDevice;
+        let currentBill = null, selectedItem = null, html5QrCode = null;
+
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => navigator.serviceWorker.register('sw.js'));
+        }
+
+        window.onload = function() {
+            const u = localStorage.getItem('rs-url');
+            const k = localStorage.getItem('rs-key');
+            if(u && k) { supabaseClient = supabase.createClient(u, k); checkSession(); }
+            const today = new Date();
+            document.getElementById('del-date').valueAsDate = today;
+        };
+
+        function openSettings() { if(prompt("Code:")==='5563990') document.getElementById('settings-modal').style.display='flex'; }
+        function saveConfig() { localStorage.setItem('rs-url', document.getElementById('conf-url').value); localStorage.setItem('rs-key', document.getElementById('conf-key').value); location.reload(); }
+        async function handleLogin() { const e=document.getElementById('login-email').value, p=document.getElementById('login-pass').value; const {error}=await supabaseClient.auth.signInWithPassword({email:e, password:p}); if(!error) checkSession(); else alert(error.message); }
+        async function checkSession() { const {data}=await supabaseClient.auth.getSession(); if(data.session) document.getElementById('login-view').style.display='none'; }
+        async function logout() { await supabaseClient.auth.signOut(); location.reload(); }
+
+        function updateDateDisplay() {
+            const val = document.getElementById('del-date').value;
+            if(!val) return;
+            const d = new Date(val);
+            const day = String(d.getDate()).padStart(2, '0');
+            const month = String(d.getMonth() + 1).padStart(2, '0');
+            const year = d.getFullYear();
+            document.getElementById('date-display').innerText = `${day}-${month}-${year}`;
+        }
+
+        function adjustDate(diff) {
+            const input = document.getElementById('del-date');
+            const d = new Date(input.value);
+            d.setDate(d.getDate() + diff);
+            input.value = d.toISOString().split('T')[0];
+            updateDateDisplay();
+        }
+
+        async function connectPrinter() {
+            try {
+                printerDevice = await navigator.bluetooth.requestDevice({ filters: [{ services: ['000018f0-0000-1000-8000-00805f9b34fb'] }] });
+                const server = await printerDevice.gatt.connect();
+                const service = await server.getPrimaryService('000018f0-0000-1000-8000-00805f9b34fb');
+                printCharacteristic = await service.getCharacteristic('00002af1-0000-1000-8000-00805f9b34fb');
+                document.getElementById('screen-connect').classList.remove('active');
+                document.getElementById('screen-work').classList.add('active');
+            } catch(e) { alert("Connect Failed: " + e.message); }
+        }
+
+        async function fetchBillAndShowItems() {
+            const btn = document.getElementById('btn-fetch');
+            if(btn.innerText.includes("START SCANNING")) { startScanner(); return; }
+
+            const bNo = document.getElementById('bill-no').value.trim();
+            if(!bNo) return alert("Enter Bill Number");
+
+            btn.innerText = "FETCHING..."; btn.disabled = true;
+
+            try {
+                const { data, error } = await supabaseClient.from('bills').select('*').eq('bill_number', bNo).single();
+                if(error || !data) throw new Error("Bill Not Found");
+                
+                currentBill = data;
+                
+                if(data.delivery_date) document.getElementById('del-date').value = data.delivery_date;
+                else document.getElementById('del-date').valueAsDate = new Date();
+                
+                const list = document.getElementById('items-list');
+                list.innerHTML = "";
+                if(data.items_json && data.items_json.length > 0) {
+                    data.items_json.forEach((item, idx) => {
+                        list.innerHTML += `<div class="item-card" onclick="selectItem(${idx})">
+                            <span class="item-name">${item.name}</span>
+                            <span>₹${item.price}</span>
+                        </div>`;
+                    });
+                } else {
+                    list.innerHTML = `<div class="item-card" onclick="selectItem(-1)">Generic Item</div>`;
+                }
+                
+                document.getElementById('modal-items').style.display = 'flex';
+                btn.innerText = "GET BILL ITEMS"; btn.disabled = false;
+
+            } catch(e) {
+                alert(e.message);
+                btn.innerText = "GET BILL ITEMS"; btn.disabled = false;
+            }
+        }
+
+        function selectItem(idx) {
+            if(idx >= 0) selectedItem = currentBill.items_json[idx];
+            else selectedItem = { name: "General Item" };
+            document.getElementById('modal-items').style.display = 'none';
+            document.getElementById('date-box').style.display = 'block';
+            updateDateDisplay();
+            const btn = document.getElementById('btn-fetch');
+            btn.innerHTML = '<i class="ri-qr-scan-2-line"></i> START SCANNING';
+            btn.style.background = 'var(--gold)';
+            btn.style.color = 'black';
+        }
+
+        function closeModal(id) {
+            document.getElementById(id).style.display = 'none';
+            if(id === 'modal-scan' && html5QrCode) html5QrCode.stop().then(()=>html5QrCode.clear());
+        }
+
+        function startScanner() {
+            document.getElementById('modal-scan').style.display = 'flex';
+            html5QrCode = new Html5Qrcode("qr-reader");
+            html5QrCode.start({facingMode:"environment"}, {fps:10, qrbox:250}, (t) => handleScanSuccess(t));
+        }
+
+        function skipScanning() {
+            if(html5QrCode) html5QrCode.stop().then(()=>html5QrCode.clear());
+            document.getElementById('modal-scan').style.display = 'none';
+            preparePreview();
+        }
+
+        async function handleScanSuccess(pcsId) {
+            if(html5QrCode) await html5QrCode.stop(); 
+            html5QrCode.clear();
+            document.getElementById('modal-scan').style.display = 'none';
+
+            try {
+                // 1. Check if item exists in Inventory
+                const { data: invData } = await supabaseClient.from('inventory').select('*').eq('pcs_id', pcsId).single();
+
+                if (invData) {
+                    // Update Existing
+                    await supabaseClient.from('inventory').update({
+                        status: 'ALTERATION', location: 'Master Ji',
+                        bill_number: currentBill.bill_number, bill_item_name: selectedItem.name
+                    }).eq('pcs_id', pcsId);
+                } else {
+                    // 2. New Entry: Find '9990' Design manually
+                    const { data: designData } = await supabaseClient.from('designs').select('id').eq('design_number', '9990').single();
+                    
+                    if (!designData) {
+                        alert("Error: Design '9990' (Order) not found in Database!");
+                        preparePreview();
+                        return;
+                    }
+
+                    // 3. Insert using fetched Design ID (REMOVED item_name & design_number column logic)
+                    const { error: invErr } = await supabaseClient.from('inventory').insert([{
+                        pcs_id: pcsId,
+                        design_id: designData.id,
+                        // item_name removed
+                        status: 'ALTERATION',
+                        location: 'Master Ji',
+                        bill_number: currentBill.bill_number,
+                        bill_item_name: selectedItem.name
+                    }]);
+
+                    if(invErr) throw invErr;
+                }
+                
+                alert("✅ Linked Successfully!");
+                preparePreview();
+
+            } catch(e) {
+                alert("Inventory Error: " + e.message);
+                preparePreview();
+            }
+        }
+
+        function preparePreview() {
+            const dateStr = document.getElementById('del-date').value;
+            const previewHtml = generateReceiptText(currentBill, currentBill.bill_number, dateStr, true);
+            document.getElementById('receipt-container').innerHTML = previewHtml;
+            document.getElementById('modal-preview').style.display = 'flex';
+        }
+
+        async function confirmAndPrint() {
+            const btn = document.querySelector('.btn-confirm');
+            btn.innerText = "PRINTING..."; btn.disabled = true;
+            const dateStr = document.getElementById('del-date').value;
+
+            try {
+                // 1. Update Bill Date
+                await supabaseClient.from('bills').update({ delivery_date: dateStr }).eq('id', currentBill.id);
+
+                // 2. Ticket Update (Constraint Safe - NO UPSERT)
+                const { data: existing } = await supabaseClient.from('alteration_tickets').select('id').eq('bill_number', currentBill.bill_number).single();
+                
+                if(existing) {
+                    await supabaseClient.from('alteration_tickets').update({ status:'PENDING', delivery_date: dateStr }).eq('id', existing.id);
+                } else {
+                    await supabaseClient.from('alteration_tickets').insert([{ 
+                        bill_number: currentBill.bill_number, delivery_date: dateStr, status: 'PENDING' 
+                    }]);
+                }
+
+                // 3. Print
+                const rawCmds = generateReceiptText(currentBill, currentBill.bill_number, dateStr, false);
+                await printCharacteristic.writeValue(new TextEncoder().encode(rawCmds));
+
+                alert("✅ Done! Reloading...");
+                location.reload();
+
+            } catch(e) {
+                alert("Error: " + e.message);
+                btn.innerText = "PRINT & FINISH"; btn.disabled = false;
+            }
+        }
+
+        function generateReceiptText(billData, billNo, dateStr, isHtml) {
+            let displayDate = dateStr;
+            if(dateStr.length === 10) {
+                const parts = dateStr.split('-'); 
+                displayDate = `${parts[2]}-${parts[1]}-${parts[0].slice(-2)}`;
+            }
+            const now = new Date();
+            const dateDisplay = `${String(now.getDate()).padStart(2,'0')}/${String(now.getMonth()+1).padStart(2,'0')}`;
+            const timeDisplay = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+            const headerTimeStr = `${dateDisplay} ${timeDisplay}`;
+
+            const NL = isHtml ? "<br>" : "\n";
+            const LINE = isHtml ? "--------------------------------<br>" : "--------------------------------\n";
+            const B_ON = isHtml ? "<b>" : "\x1B\x45\x01";
+            const B_OFF = isHtml ? "</b>" : "\x1B\x45\x00";
+            const CEN = isHtml ? "<div style='text-align:center'>" : "\x1B\x61\x01";
+            const LEFT = isHtml ? "<div style='text-align:left'>" : "\x1B\x61\x00";
+            const END_DIV = isHtml ? "</div>" : "";
+            const BIG = isHtml ? "<span style='font-size:1.5em; font-weight:bold'>" : "\x1D\x21\x11";
+            const NORM = isHtml ? "</span>" : "\x1D\x21\x00";
+            const CUT = isHtml ? "" : "\x1D\x56\x41\x00";
+            const INIT = isHtml ? "" : "\x1B\x40";
+
+            let m = billData.measurements;
+            while(typeof m === 'string') { try { if(m.startsWith('"')) m = m.slice(1, -1).replace(/\\"/g, '"'); m = JSON.parse(m); } catch(e) { break; } }
+            if (!m || typeof m !== 'object') m = {};
+
+            let flatM = { ...m };
+            if(m.upper) flatM = { ...flatM, ...m.upper };
+            if(m.lower) flatM = { ...flatM, ...m.lower };
+
+            const getVal = (key) => {
+                const aliases = {
+                    'length': ['Length', 'length', 'len', 'Lenth', 'lenth'], 
+                    'pent length': ['Pent Length', 'pent length', 'Pent L', 'pent l'],
+                    'baju': ['Baju Length', 'baju length', 'Sleeve', 'sleeve'],
+                    'baju moti': ['Baju Mori', 'baju mori', 'Mori', 'mori'],
+                    'hip': ['Hip', 'Hips', 'hip', 'hips'],
+                    'inner length': ['Inner Length', 'inner length', 'Lower Length', 'lower length']
+                };
+                const search = [key, ...(aliases[key.toLowerCase()] || [])];
+                for(let k of search) {
+                    if(flatM[k] && flatM[k] !== '-') return flatM[k];
+                    const fKey = Object.keys(flatM).find(o => o.toLowerCase() === k.toLowerCase());
+                    if(fKey && flatM[fKey] && typeof flatM[fKey] !== 'object' && flatM[fKey] !== '-') return flatM[fKey];
+                }
+                return "-";
+            };
+
+            const displayMap = { "Upper Length": "Upper L", "Inner Length": "Inner L", "Baju Length": "Baju L", "Baju Mori": "Baju M", "Pent Length": "Pent L", "Byseps": "Biceps" };
+
+            let txt = INIT + LEFT + "ROYAL SHERWANI   " + headerTimeStr + NL + LINE;
+            txt += LEFT + BIG + billNo + "     " + displayDate + NORM + NL + LINE;
+            txt += CEN + B_ON + "LOWER          UPPER" + B_OFF + END_DIV + NL;
+
+            const lowerKeys = ["Asan", "Kamar", "Hip", "Thai", "Ghutna", "Pindli", "Mori", "Pent Length", "Baju Mori", "Byseps"];
+            const upperKeys = ["Pagdi", "Neck", "Chest", "Pet", "Hip", "Baju", "Length", "Upper Length", "Inner Length"];
+            const maxRows = Math.max(lowerKeys.length, upperKeys.length);
+            
+            for(let i=0; i<maxRows; i++) {
+                let leftCol = "", rightCol = "";
+                if(i < lowerKeys.length) {
+                    let val = getVal(lowerKeys[i]);
+                    let label = displayMap[lowerKeys[i]] || lowerKeys[i];
+                    if(label.length > 7) label = label.substring(0,7);
+                    leftCol = `${label}:${val}`;
+                }
+                if(i < upperKeys.length) {
+                    let val = getVal(upperKeys[i]);
+                    let label = displayMap[upperKeys[i]] || upperKeys[i];
+                    if(label.length > 7) label = label.substring(0,7);
+                    rightCol = `${label}:${val}`;
+                }
+                if(isHtml) {
+                    txt += `<div style="display:flex; justify-content:center; font-size:11px; gap:15px;"><div style="width:120px; text-align:left;">${leftCol}</div><div style="width:120px; text-align:left;">${rightCol}</div></div>`;
+                } else {
+                    txt += leftCol.padEnd(16, " ") + "  " + rightCol + NL;
+                }
+            }
+            txt += NL + NL + NL + NL + CUT;
+            return txt;
+        }
+    </script>
+</body>
+</html>
